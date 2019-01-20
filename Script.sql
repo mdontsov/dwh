@@ -62,8 +62,7 @@ broker_id int(3),
 operation_id int(1),
 date_id int(8),
 quantity int(3), 
-amount int(4),
-profit float(6,2),
+price int(4),
 primary key(id),
 foreign key(item_id) references Dim_item(id)
 on update cascade on delete set null,
@@ -129,20 +128,58 @@ insert into dim_item (dim_item.name) values
 ('Huawei'),
 ('Tesla')
 
+/* Generate random dates for the last 5 years */
 insert into dim_date(date_of, dow, year_of) values
 ((select now() - interval floor(rand() * 1825) day), dayname(date_of) , year(date_of))
 
-select * from dim_date where id in (32)
-
-delete from dim_date
-
-insert into fct_trade (item_id, trader_id, broker_id, operation_id, date_id, quantity, amount) values
+/* Create random trade operations in random order */
+insert into fct_trade (item_id, trader_id, broker_id, operation_id, date_id, quantity, price) 
+values
 ((select dim_item.id from dim_item order by rand() limit 1), 
 (select dim_trader.id from dim_trader order by rand() limit 1),
 (select dim_broker.id from dim_broker order by rand() limit 1),
 (select dim_operation.id from dim_operation order by rand() limit 1),
-(select dim_date.id from dim_date where dim_date.dow not in ('Saturday', 'Sunday') order by rand() limit 1),
-floor(rand()*1000),
-floor(rand()*50))
+(select dim_date.id from dim_date where weekday(dim_date.date_of) < 5 order by rand() limit 1),
+floor(rand()*100),
+floor(rand()*100))
 
-select * from fct_trade
+/* Group 3 best trades per each category for year */
+(select dt.category Category, dt.name Trader, ft.quantity*ft.price Total, dd.year_of
+from dim_trader dt 
+join fct_trade ft on ft.trader_id = dt.id
+join dim_date dd on dd.id = ft.date_id
+where category = 'Corp'
+and dd.year_of = '2018'
+order by total desc
+limit 3)
+union all
+(select dt.category Category, dt.name Trader, ft.quantity*ft.price Total, dd.year_of
+from dim_trader dt 
+join fct_trade ft on ft.trader_id = dt.id
+join dim_date dd on dd.id = ft.date_id
+where category = 'Small'
+and dd.year_of = '2018'
+order by total desc
+limit 3)
+union all
+(select dt.category Category, dt.name Trader, ft.quantity*ft.price Total, dd.year_of
+from dim_trader dt 
+join fct_trade ft on ft.trader_id = dt.id
+join dim_date dd on dd.id = ft.date_id
+where category = 'Private'
+and dd.year_of = '2018'
+order by total desc
+limit 3)
+
+/* Display stock sell profit/loss ratio */
+select
+(select name from dim_item 
+join fct_trade 
+on fct_trade.item_id = dim_item.id 
+and fct_trade.id = 14) as 'Stock name',
+(select @units := quantity 
+from fct_trade where id = 14) as 'Units',
+(select truncate (@sell_price := quantity/price, 2) 
+from fct_trade where id = 12) as 'Sell price',
+(select truncate (@buy_price := quantity/price, 2) from fct_trade where id = 21) as 'Buy price',
+(select truncate (@units*(@sell_price-@buy_price), 2)) as 'Profit'
